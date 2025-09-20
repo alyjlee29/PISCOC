@@ -523,6 +523,31 @@ function mapRoleToAirtable(role: string): string {
   return roleMappings[role] || role;
 }
 
+// Normalize roles from local storage/user input into a list Airtable can understand
+function normalizeRolesForAirtable(role: unknown): string[] {
+  if (!role) {
+    return [];
+  }
+
+  let rolesArray: string[] = [];
+
+  if (Array.isArray(role)) {
+    rolesArray = role as string[];
+  } else if (typeof role === 'string') {
+    rolesArray = role
+      .split(/[,\n]/)
+      .map(r => r.trim())
+      .filter(Boolean);
+  }
+
+  const normalizedRoles = rolesArray
+    .map(mapRoleToAirtable)
+    .filter(Boolean);
+
+  // Remove duplicates while preserving order
+  return Array.from(new Set(normalizedRoles));
+}
+
 // Helper function to convert team member to Airtable format
 async function convertTeamMemberToAirtableFormat(member: any): Promise<Partial<AirtableTeamMember>> {
   console.log(`Converting team member to Airtable format:`, {
@@ -533,13 +558,13 @@ async function convertTeamMemberToAirtableFormat(member: any): Promise<Partial<A
     externalId: member.externalId
   });
 
-  // Map the role to a valid Airtable select option
-  const mappedRole = member.role ? mapRoleToAirtable(member.role) : null;
-  console.log(`Mapped role "${member.role}" to "${mappedRole}"`);
+  // Map the role(s) to valid Airtable select options
+  const mappedRoles = normalizeRolesForAirtable(member.role);
+  console.log(`Mapped roles "${member.role}" to`, mappedRoles);
 
   const airtableData: Partial<AirtableTeamMember> = {
     Name: member.name,
-    Role: mappedRole ? [mappedRole] : [], // Role is an array in Airtable, handle empty roles
+    Role: mappedRoles,
     Bio: member.bio
   };
 
@@ -1123,10 +1148,18 @@ export function setupAirtableRoutes(app: Express) {
             missingFields.push("Name");
           }
 
-          // Handle Role field - it's an array in Airtable, convert to string
+          // Handle Role field - it's an array in Airtable, convert to comma-separated string
           let roleValue = defaultRole;
-          if (fields.Role && Array.isArray(fields.Role) && fields.Role.length > 0) {
-            roleValue = fields.Role[0]; // Take first role
+          if (fields.Role && Array.isArray(fields.Role)) {
+            const roles = fields.Role
+              .map(role => typeof role === 'string' ? role.trim() : '')
+              .filter(Boolean);
+
+            if (roles.length > 0) {
+              roleValue = roles.join(', ');
+            } else {
+              missingFields.push("Role");
+            }
           } else if (fields.Role && typeof fields.Role === 'string') {
             roleValue = fields.Role;
           } else {
