@@ -192,14 +192,7 @@ export default function TeamMembersPage() {
       return;
     }
 
-    const inputElement = event.target;
-    const { files } = inputElement;
-
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    const file = files[0];
+    const file = event.target.files[0];
     const formDataUpload = new FormData();
     formDataUpload.append("image", file);
 
@@ -210,11 +203,18 @@ export default function TeamMembersPage() {
     setIsUploadingImage(true);
 
     try {
-      const response = await apiRequest("POST", "/api/team-members/upload-image", formDataUpload);
-      const data = (await response.json().catch(() => null)) as {
-        imageUrl?: string;
-        teamMember?: TeamMember;
-      } | null;
+      const response = await fetch("/api/team-members/upload-image", {
+        method: "POST",
+        body: formDataUpload,
+        credentials: "include",
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = data?.message || "Failed to upload image";
+        throw new Error(message);
+      }
 
       const newImageUrl = typeof data?.imageUrl === "string" ? data.imageUrl : "";
 
@@ -260,7 +260,7 @@ export default function TeamMembersPage() {
       });
     } finally {
       setIsUploadingImage(false);
-      inputElement.value = "";
+      event.target.value = "";
     }
   };
 
