@@ -7,16 +7,45 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+type JsonLike = Record<string, unknown> | unknown[] | string | number | boolean | null;
+
+function isBodyInit(data: unknown): data is BodyInit {
+  return (
+    typeof Blob !== "undefined" && data instanceof Blob ||
+    typeof ArrayBuffer !== "undefined" && (data instanceof ArrayBuffer || ArrayBuffer.isView(data as ArrayBufferView)) ||
+    typeof FormData !== "undefined" && data instanceof FormData ||
+    typeof URLSearchParams !== "undefined" && data instanceof URLSearchParams ||
+    typeof ReadableStream !== "undefined" && data instanceof ReadableStream ||
+    typeof data === "string"
+  );
+}
+
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  data?: JsonLike | BodyInit,
+  init?: RequestInit,
 ): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  let body: BodyInit | undefined;
+
+  if (data !== undefined) {
+    if (isBodyInit(data)) {
+      body = data;
+    } else {
+      headers.set("Content-Type", "application/json");
+      body = JSON.stringify(data);
+    }
+  } else if (init?.body) {
+    body = init.body as BodyInit;
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
+    ...init,
+    headers,
+    body,
   });
 
   await throwIfResNotOk(res);
